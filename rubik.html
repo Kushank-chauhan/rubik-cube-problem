@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rubik's Cube Solver</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #222;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #cube-display {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rubik's Cube Solver</h1>
+  <div>
+    <button onclick="cube.scramble(); updateCube()">Scramble</button>
+    <button onclick="cube.solve(); updateCube()">Solve</button>
+    <button onclick="cube.rotate('U'); updateCube()">Rotate U</button>
+    <button onclick="cube.rotate('F'); updateCube()">Rotate F</button>
+  </div>
+  <div id="cube-display"></div>
+
+  <script>
+    // --- Mock getCubeSvg for visual output ---
+    function getCubeSvg(state) {
+      const colorMap = {
+        r: 'red', g: 'green', b: 'blue',
+        y: 'yellow', o: 'orange', w: 'white'
+      };
+      let html = '<div style="display:grid; grid-template-columns:repeat(12,20px); gap:1px;">';
+      const faceIndices = {
+        U: 0, L: 9, F: 18, R: 27, B: 36, D: 45
+      };
+      const faces = ['U','L','F','R','B','D'];
+
+      // Draw net layout
+      for (let i = 0; i < 54; i++) {
+        const col = (i < 9) ? 3 + i % 3 : 
+                    (i < 18) ? i % 3 : 
+                    (i < 27) ? 3 + i % 3 :
+                    (i < 36) ? 6 + i % 3 :
+                    (i < 45) ? 9 + i % 3 :
+                               3 + i % 3;
+        const row = (i < 9) ? 0 : 
+                    (i < 18) ? 3 + Math.floor((i - 9) / 3) :
+                    (i < 27) ? 3 + Math.floor((i - 18) / 3) :
+                    (i < 36) ? 3 + Math.floor((i - 27) / 3) :
+                    (i < 45) ? 3 + Math.floor((i - 36) / 3) :
+                               6 + Math.floor((i - 45) / 3);
+        html += `<div style="grid-column:${col+1}; grid-row:${row+1}; width:20px; height:20px; background:${colorMap[state[i]]}; border:1px solid #111;"></div>`;
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // --- Cube Class ---
+    class Cube {
+      constructor() {
+        this.faces = {
+          U: Array(9).fill('w'),
+          D: Array(9).fill('y'),
+          L: Array(9).fill('o'),
+          R: Array(9).fill('r'),
+          F: Array(9).fill('g'),
+          B: Array(9).fill('b')
+        };
+        this.history = [];
+      }
+
+      rotate(face, direction = 'CW') {
+        this.history.push(`${face}${direction === 'CCW' ? "'" : ""}`);
+        this.rotateFace(face, direction);
+        this.rotateAdjacent(face, direction);
+      }
+
+      rotateFace(face, direction) {
+        const f = this.faces[face];
+        const r = [];
+        if (direction === 'CW') {
+          r[0] = f[6]; r[1] = f[3]; r[2] = f[0];
+          r[3] = f[7]; r[4] = f[4]; r[5] = f[1];
+          r[6] = f[8]; r[7] = f[5]; r[8] = f[2];
+        } else {
+          r[0] = f[2]; r[1] = f[5]; r[2] = f[8];
+          r[3] = f[1]; r[4] = f[4]; r[5] = f[7];
+          r[6] = f[0]; r[7] = f[3]; r[8] = f[6];
+        }
+        this.faces[face] = r;
+      }
+
+      rotateAdjacent(face, direction) {
+        const f = this.faces;
+        const dir = direction === 'CW' ? 1 : -1;
+
+        if (face === 'U') {
+          const [l, fr, r, b] = [f.L.slice(0, 3), f.F.slice(0, 3), f.R.slice(0, 3), f.B.slice(0, 3)];
+          if (dir === 1) {
+            [f.L[0], f.L[1], f.L[2]] = b;
+            [f.F[0], f.F[1], f.F[2]] = l;
+            [f.R[0], f.R[1], f.R[2]] = fr;
+            [f.B[0], f.B[1], f.B[2]] = r;
+          } else {
+            [f.L[0], f.L[1], f.L[2]] = fr;
+            [f.F[0], f.F[1], f.F[2]] = r;
+            [f.R[0], f.R[1], f.R[2]] = b;
+            [f.B[0], f.B[1], f.B[2]] = l;
+          }
+        }
+
+        if (face === 'F') {
+          const [u, r, d, l] = [f.U.slice(6, 9), [f.R[0], f.R[3], f.R[6]], f.D.slice(0, 3), [f.L[2], f.L[5], f.L[8]]];
+          if (dir === 1) {
+            [f.U[6], f.U[7], f.U[8]] = l.reverse();
+            [f.R[0], f.R[3], f.R[6]] = u;
+            [f.D[0], f.D[1], f.D[2]] = r.reverse();
+            [f.L[2], f.L[5], f.L[8]] = d;
+          } else {
+            [f.U[6], f.U[7], f.U[8]] = r;
+            [f.R[0], f.R[3], f.R[6]] = d.reverse();
+            [f.D[0], f.D[1], f.D[2]] = l;
+            [f.L[2], f.L[5], f.L[8]] = u.reverse();
+          }
+        }
+      }
+
+      scramble(moves = 20) {
+        const faces = ['U', 'D', 'L', 'R', 'F', 'B'];
+        for (let i = 0; i < moves; i++) {
+          const face = faces[Math.floor(Math.random() * 6)];
+          const dir = Math.random() > 0.5 ? 'CW' : 'CCW';
+          this.rotate(face, dir);
+        }
+      }
+
+      solve() {
+        const steps = [...this.history].reverse();
+        this.history = [];
+        for (let step of steps) {
+          const face = step[0];
+          const dir = step.length === 1 ? 'CCW' : 'CW';
+          this.rotate(face, dir);
+        }
+      }
+
+      toString() {
+        return Object.values(this.faces).map(face => face.join('')).join('');
+      }
+
+      render() {
+        return getCubeSvg(this.toString());
+      }
+    }
+
+    // Init and render
+    const cube = new Cube();
+    function updateCube() {
+      document.getElementById('cube-display').innerHTML = cube.render();
+    }
+    updateCube();
+  </script>
+</body>
+</html>
+
